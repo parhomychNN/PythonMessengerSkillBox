@@ -26,23 +26,17 @@ class ServerProtocol(LineOnlyReceiver):
         self.factory.clients.remove(self)
 
     def send_history(self):
-        return self.factory.last_10_messages
+        for message in self.factory.last_10_messages:
+            self.sendLine(message.encode())
 
     def lineReceived(self, line: bytes):
-        content = line.decode()
+        content = line.decode(errors="ignore")
 
-        if self.login is not None:
-            content = f"Message from {self.login}: {content}"
-            self.factory.last_10_messages.append(content)
-
-            for user in self.factory.clients:
-                if user is not self:
-                    user.sendLine(content.encode())
-        else:
+        if self.login is None:
             # login:admin -> admin
             if content.startswith("login:"):
                 self.login = content.replace("login:", "")
-                if self.login in self.factory.clients:
+                if self.factory.clients.__contains__(self.login):
                     self.sendLine(f"Login {self.login} is busy, try another login".encode())
                     self.connectionLost()
                 else:
@@ -52,6 +46,13 @@ class ServerProtocol(LineOnlyReceiver):
             else:
                 self.sendLine("Invalid login".encode())
 
+            for user in self.factory.clients:
+                if user is not self:
+                    user.sendLine(content.encode())
+        else:
+            content = f"Message from {self.login}: {content}"
+            self.factory.last_10_messages.append(content)
+
 
 class Server(ServerFactory):
     protocol = ServerProtocol
@@ -60,6 +61,7 @@ class Server(ServerFactory):
 
     def startFactory(self):
         self.clients = []
+        self.last_10_messages = []
         print("Server started")
 
     def stopFactory(self):
